@@ -4,3 +4,6 @@ queue: queue.c queue.h
 
 testafila: testafila.c queue.c
 	gcc $(CFLAGS) $^ -o $@
+
+clean:
+	rm -rf testafila queue
