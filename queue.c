@@ -68,14 +68,14 @@ int queue_append (queue_t **queue, queue_t *elem){
 }
 
 static int queue_has(queue_t *queue, queue_t *elem){
-    queue_t *aux = elem;
+    queue_t *aux = queue;
     if (queue == NULL || elem == NULL || (elem->next == NULL) || (elem->prev == NULL))
         return 0;
 
     do{
         if (elem == queue)
             return 1;
-    }while ((elem = elem->next) != aux);
+    }while ((queue = queue->next) != aux);
 
     return 0;
 }
