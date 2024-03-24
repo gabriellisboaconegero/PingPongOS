@@ -4,7 +4,7 @@
 
 #define PPOS_TASK_ERROR_CODE -1
 #define PPOS_TASK_OK_CODE 0
-#define PPOS_STACK_SZ 1<<14
+#define PPOS_STACK_SZ 1<<16
 #define PPOS_DEBUG(msg, ...) printf("PPOS[%s]: "msg"\n", __func__, __VA_ARGS__)
 
 task_t __TaskMain ;
@@ -60,7 +60,7 @@ void task_exit (int exit_code) {
 #ifdef DEBUG
     PPOS_DEBUG("Saindo task %d.", task_id()) ;
 #endif
-    if (TaskCurr == TaskMain){
+    if (TaskCurr == TaskMain) {
 #ifdef DEBUG
         PPOS_DEBUG("%s", "Saindo Main.") ;
 #endif
@@ -78,6 +78,9 @@ int task_switch (task_t *task) {
     if (task == NULL)
         return PPOS_TASK_ERROR_CODE ;
 
+    if (task == TaskCurr)
+        return PPOS_TASK_OK_CODE ;
+
     aux = TaskCurr ;
 #ifdef DEBUG
     PPOS_DEBUG("Trocando tasks %d -> %d", task_id(), task->id) ;
@@ -85,7 +88,10 @@ int task_switch (task_t *task) {
 
     TaskCurr = task ;
     swapcontext(&aux->context, &task->context) ;
-    TaskCurr = aux ;
+    // Se está voltando para a task main a tarefa chamou task_exit
+    // ATENÇÃO, isso quer dizer que se a função chamar 
+    if (TaskCurr == TaskMain)
+        free(task->context.uc_stack.ss_sp) ;
 
     return PPOS_TASK_OK_CODE ;
 }
