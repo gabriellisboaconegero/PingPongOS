@@ -8,6 +8,7 @@
 #define __PPOS_DATA__
 
 #include <ucontext.h>		// biblioteca POSIX de trocas de contexto
+#include "queue.h"
 
 // Estrutura que define um Task Control Block (TCB)
 typedef struct task_t
