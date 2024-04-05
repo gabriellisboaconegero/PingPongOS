@@ -1,6 +1,6 @@
 CFLAGS = -Wall -Wextra -std=c99
 
-all: testes/ping-pong-dispatcher testes/ping-pong-tasks1
+all: testes/ping-pong-scheduler
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
@@ -23,6 +23,12 @@ obj/ping-pong-dispatcher.o: testes/ping-pong-dispatcher.c
 
 testes/ping-pong-dispatcher: obj/ping-pong-dispatcher.o obj/ppos_core.o obj/queue.o
 	gcc $^ -o $@
+
+obj/ping-pong-scheduler.o: testes/ping-pong-scheduler.c
+	gcc $(CFLAGS) -I $$PWD -c $^ -o $@
+
+testes/ping-pong-scheduler: obj/ping-pong-scheduler.o obj/ppos_core.o obj/queue.o
+	gcc $^ -o $@
 # ============ testes ============
 
 obj/queue.o: queue.c queue.h
@@ -32,4 +38,4 @@ obj/ppos_core.o: ppos_core.c ppos.h ppos_data.h
 	gcc $(CFLAGS) -c ppos_core.c -o $@
 
 clean:
-	rm -rf obj/* testes/ping-pong-tasks{1..3} testes/testafila testes/ping-pong-dispatcher
+	rm -rf obj/* testes/ping-pong-tasks{1..3} testes/testafila testes/ping-pong-dispatcher testes/ping-pong-scheduler
