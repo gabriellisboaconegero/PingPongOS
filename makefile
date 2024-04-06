@@ -1,6 +1,6 @@
 CFLAGS = -Wall -Wextra -std=c99
 
-all: testes/ping-pong-scheduler
+all: obj testes/ping-pong-scheduler
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
@@ -31,6 +31,9 @@ testes/ping-pong-scheduler: obj/ping-pong-scheduler.o obj/ppos_core.o obj/queue.
 	gcc $^ -o $@
 # ============ testes ============
 
+obj:
+	mkdir -p obj
+
 obj/queue.o: queue.c queue.h
 	gcc $(CFLAGS) -c queue.c -o $@
 
@@ -39,3 +42,6 @@ obj/ppos_core.o: ppos_core.c ppos.h ppos_data.h
 
 clean:
 	rm -rf obj/* testes/ping-pong-tasks{1..3} testes/testafila testes/ping-pong-dispatcher testes/ping-pong-scheduler
+
+build: all
+	tar --exclude=testes --exclude=obj --exclude=.git -czvf p4.tar.gz *
