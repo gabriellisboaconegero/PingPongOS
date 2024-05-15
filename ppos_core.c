@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <sys/time.h>
 #include "ppos.h"
 
 #define PPOS_TASK_ERROR_CODE -1
@@ -16,6 +18,10 @@
 #define PPOS_MIN_PRIO -20
 #define PPOS_PRIO_DELTA -1
 
+#define PPOS_QUANTA 20
+// EM micro segundos (1000 micro = 1 mili)
+#define PPOS_TICK_DELTA 1000
+
 #define MAX(a, b) ((a) < (b) ? (b) : (a))
 #define MIN(a, b) ((a) > (b) ? (b) : (a))
 #define CLAMP(v) (MAX(MIN((v), PPOS_MAX_PRIO), PPOS_MIN_PRIO))
@@ -25,9 +31,20 @@ static task_t __TaskMain ;
 static task_t *TaskCurr = &__TaskMain ;
 static task_t *TaskQueue ;
 static task_t *TaskDispatcher = &__TaskDispatcher ;
+
+// ============= Global vars =============
+// Contador de id's das tasks, diz qual o id da próxima task a ser criada
 static int idCounter = 0 ;
 
+static struct sigaction tick_action ;
+
+static struct itimerval tick_timer ;
+// ============= Global vars =============
+
+
+// =============== Funções de escalonamento  ===============
 static void dispatcher(void * arg) ;
+// =============== Funções de escalonamento  ===============
 
 #ifdef DEBUG
 static void print_task (void *ptr) {
@@ -53,6 +70,26 @@ static void print_task_prio (void *ptr) {
 }
 #endif
 
+// =============== Funções de preempção  ===============
+static void tick_handler(int signum) {
+    (void)signum ;
+#ifdef DEBUG
+    PPOS_DEBUG("Tick handler ativado durante execução da task %d", TaskCurr->id) ;
+#endif
+    if (TaskCurr->is_sys)
+        return ;
+       
+    TaskCurr->quanta-- ;
+
+#ifdef DEBUG
+    PPOS_DEBUG("Task %d quanta [%d]", TaskCurr->id, TaskCurr->quanta) ;
+#endif
+    if (TaskCurr->quanta <= 0){
+        task_yield() ;
+    }
+}
+// =============== Funções de preempção  ===============
+
 // =============== Funções gerais ===============
 void ppos_init () {
 #if DEBUG
@@ -60,19 +97,44 @@ void ppos_init () {
 #endif
     setvbuf (stdout, 0, _IONBF, 0) ;
 
+    // Coloca main na fila de prontas
     if (queue_append((queue_t **) &TaskQueue, (queue_t *) TaskCurr) < 0)
         return ;
 
+    // Configura a task main
     getcontext(&TaskCurr->context) ;
     TaskCurr->id = idCounter++ ;
     TaskCurr->status = PPOS_RODANDO ;
     task_setprio(NULL, PPOS_DEFAULT_PRIO) ;
+    TaskCurr->is_sys = 0 ;
 
+    // Cria tratador de ticks, usando UNIX signals
+    tick_action.sa_handler = tick_handler ;
+    sigemptyset(&tick_action.sa_mask) ;
+    tick_action.sa_flags = 0 ;
+    if (sigaction(SIGALRM, &tick_action, 0) < 0) {
+        perror("PPOS[ERROR]: Erro em sigaction: ") ;
+        exit(1) ;
+    }
+
+    // Criaa timer de ticks
+    tick_timer.it_value.tv_usec = PPOS_TICK_DELTA ;      // primeiro disparo, em micro-segundos
+    tick_timer.it_value.tv_sec  = 0 ;      // primeiro disparo, em segundos
+    tick_timer.it_interval.tv_usec = PPOS_TICK_DELTA ;   // disparos subsequentes, em micro-segundos
+    tick_timer.it_interval.tv_sec  = 0 ;   // disparos subsequentes, em segundos
+
+    // Inicia dispatcher
     task_init(TaskDispatcher, dispatcher, NULL) ;
+    TaskDispatcher->is_sys = 1 ;
 #if DEBUG
     queue_print("Tasks", (queue_t *) TaskQueue, print_task) ;
 #endif
-    // Parea já tirar o dispatcher da fila de prontos
+    // Arma temporizador logo antes de ir para dispatcher
+    if (setitimer(ITIMER_REAL, &tick_timer, 0) < 0) {
+        perror("PPOS[ERROR]: Erro em setitimer:");
+    }
+
+    // Para já tirar o dispatcher da fila de prontos
     task_switch(TaskDispatcher) ;
     
     return ;
@@ -98,10 +160,11 @@ int task_init (task_t *task,			// descritor da nova tarefa
     task->context.uc_stack.ss_flags = 0 ;
     task->context.uc_link = 0 ;
     makecontext(&task->context, (void (*)(void))start_func, 1, arg) ;
-    task_setprio(task, PPOS_DEFAULT_PRIO) ;
-
     task->id = idCounter++ ;
+    task_setprio(task, PPOS_DEFAULT_PRIO) ;
+    task->is_sys = 0 ;
 
+    // Coloca tarefa na fila de prontas
     if (queue_append((queue_t **) &TaskQueue, (queue_t *) task) < 0)
         return PPOS_TASK_ERROR_CODE ;
 
@@ -122,6 +185,7 @@ void task_exit (int exit_code) {
 #ifdef DEBUG
     PPOS_DEBUG("Saindo task %d.", task_id()) ;
 #endif
+    // Dispatcher é a última tarefa a terminar
     if (TaskCurr == TaskDispatcher) {
 #ifdef DEBUG
         PPOS_DEBUG("%s", "Saindo Main.") ;
@@ -144,11 +208,13 @@ int task_switch (task_t *task) {
     if (task == TaskCurr)
         return PPOS_TASK_OK_CODE ;
 
+    // Salva task atual para trocar dela para task_t *task
     aux = TaskCurr ;
 #ifdef DEBUG
     PPOS_DEBUG("Trocando tasks %d -> %d", task_id(), task->id) ;
 #endif
 
+    // Muda task atual para a task_t *task
     TaskCurr = task ;
     swapcontext(&aux->context, &task->context) ;
 
@@ -216,11 +282,13 @@ static void dispatcher(void * arg) {
 #ifdef DEBUG
     PPOS_DEBUG("%s", "Iniciando dispatcher") ;
 #endif
+    // Remove o dispatcher da fila de prontos
     if (queue_remove((queue_t **) &TaskQueue, (queue_t *) TaskDispatcher) < 0) {
-        fprintf(stderr, "[UNREACHABLE]: Mão deveria chegar aqui\n") ;
+        fprintf(stderr, "[UNREACHABLE]: Não deveria chegar aqui\n") ;
         exit(1) ;
     }
 
+    // Enquanto tiver tasks para executar na fila de prontos
     while (queue_size((queue_t *) TaskQueue)) {
         proxima = scheduler() ;
         if (proxima != NULL) {
@@ -228,6 +296,8 @@ static void dispatcher(void * arg) {
 #ifdef DEBUG
     PPOS_DEBUG("Proxima task %d", proxima->id) ;
 #endif
+            proxima->quanta = PPOS_QUANTA ;
+            // Executa task proxima
             task_switch(proxima) ;
             
             switch (proxima->status) {
@@ -238,8 +308,10 @@ static void dispatcher(void * arg) {
                         free(proxima->context.uc_stack.ss_sp) ;
                     break ;
                 case PPOS_PRONTA:
+                    // Coloca na fila de prontas de volta
                     if (queue_append((queue_t **) &TaskQueue, (queue_t *) proxima) < 0)
                         exit(1) ;
+                    // Tarefa executada, restaura sua prioridade fixa
                     proxima->dprio = proxima->prio ;
                     break ;
                 default:

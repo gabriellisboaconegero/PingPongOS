@@ -18,6 +18,8 @@ typedef struct task_t
   ucontext_t context ;          // contexto armazenado da tarefa
   short status ;                // pronta, rodando, suspensa, ...
   short prio, dprio ;           // Prioridade estatia e dinamicaa
+  short quanta ;                // Quanta de tempo definido pelo dispatcher
+  short is_sys ;                // Informa se é uma task de kernel ou não
   // ... (outros campos serão adicionados mais tarde)
 } task_t ;
 

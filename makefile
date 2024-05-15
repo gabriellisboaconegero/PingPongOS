@@ -1,6 +1,7 @@
-CFLAGS = -Wall -Wextra -std=c99
+CFLAGS = -Wall -Wextra
+PROJETO = p4
 
-all: obj testes/ping-pong-scheduler
+all: obj exe testes/ping-pong-preempcao
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
@@ -29,19 +30,32 @@ obj/ping-pong-scheduler.o: testes/ping-pong-scheduler.c
 
 testes/ping-pong-scheduler: obj/ping-pong-scheduler.o obj/ppos_core.o obj/queue.o
 	gcc $^ -o $@
+
+obj/ping-pong-%.o: testes/ping-pong-%.c
+	gcc $(CFLAGS) -I $$PWD -c $^ -o $@
+
+testes/ping-pong-%: obj/ping-pong-%.o obj/ppos_core.o obj/queue.o
+	gcc $^ -o exe/"`basename $@`"
 # ============ testes ============
 
+# ============ objects ============
 obj:
 	mkdir -p obj
+
+exe:
+	mkdir -p exe
 
 obj/queue.o: queue.c queue.h
 	gcc $(CFLAGS) -c queue.c -o $@
 
 obj/ppos_core.o: ppos_core.c ppos.h ppos_data.h 
 	gcc $(CFLAGS) -c ppos_core.c -o $@
+# ============ objects ============
 
+# ============ misc ============
 clean:
-	rm -rf obj/* testes/ping-pong-tasks{1..3} testes/testafila testes/ping-pong-dispatcher testes/ping-pong-scheduler
+	rm -rf exe/* obj/* testes/ping-pong-tasks{1..3} testes/testafila testes/ping-pong-dispatcher testes/ping-pong-scheduler
 
 build: all
-	tar --exclude=testes --exclude=obj --exclude=.git -czvf p4.tar.gz *
+	tar --exclude=testes --exclude=obj --exclude=.git -czvf $(PROJETO).tar.gz *
+# ============ misc ============
