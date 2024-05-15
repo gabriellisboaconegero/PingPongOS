@@ -20,6 +20,9 @@ typedef struct task_t
   short prio, dprio ;           // Prioridade estatia e dinamicaa
   short quanta ;                // Quanta de tempo definido pelo dispatcher
   short is_sys ;                // Informa se é uma task de kernel ou não
+  unsigned int t_ini, t_end ;   // Tempo de inicio e fim (task_init, task_end)
+  unsigned int t_proc ;         // Tempo gasto na CPU
+  unsigned int actvs ;          // Quantas vezes foi colocado na CPU
   // ... (outros campos serão adicionados mais tarde)
 } task_t ;
 

@@ -18,7 +18,7 @@
 #define PPOS_MIN_PRIO -20
 #define PPOS_PRIO_DELTA -1
 
-#define PPOS_QUANTA 20
+#define PPOS_QUANTA 10
 // EM micro segundos (1000 micro = 1 mili)
 #define PPOS_TICK_DELTA 1000
 
@@ -39,6 +39,10 @@ static int idCounter = 0 ;
 static struct sigaction tick_action ;
 
 static struct itimerval tick_timer ;
+
+static unsigned int ppos_time = 0 ;
+
+static unsigned int task_curr_time = 0 ;
 // ============= Global vars =============
 
 
@@ -68,20 +72,23 @@ static void print_task_prio (void *ptr) {
    printf ("<%d (%d)>", elem->id, elem->dprio) ;
    elem->next ? printf ("%d", elem->next->id) : printf ("*") ;
 }
+
 #endif
 
 // =============== Funções de preempção  ===============
 static void tick_handler(int signum) {
     (void)signum ;
-#ifdef DEBUG
+#if defined(DEBUG) && defined(TICK_DEBUG)
     PPOS_DEBUG("Tick handler ativado durante execução da task %d", TaskCurr->id) ;
 #endif
+    // A cada tick incremeta o número de milisegundos passados
+    ppos_time += PPOS_TICK_DELTA/1000 ;
     if (TaskCurr->is_sys)
         return ;
        
     TaskCurr->quanta-- ;
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(TICK_DEBUG)
     PPOS_DEBUG("Task %d quanta [%d]", TaskCurr->id, TaskCurr->quanta) ;
 #endif
     if (TaskCurr->quanta <= 0){
@@ -89,6 +96,12 @@ static void tick_handler(int signum) {
     }
 }
 // =============== Funções de preempção  ===============
+
+// =============== Funções de Medida de tempo  ===============
+unsigned int systime () {
+    return ppos_time ;
+}
+// =============== Funções de Medida de tempo  ===============
 
 // =============== Funções gerais ===============
 void ppos_init () {
@@ -107,6 +120,9 @@ void ppos_init () {
     TaskCurr->status = PPOS_RODANDO ;
     task_setprio(NULL, PPOS_DEFAULT_PRIO) ;
     TaskCurr->is_sys = 0 ;
+    TaskCurr->t_ini = systime() ;
+    TaskCurr->t_proc = 0 ;
+    TaskCurr->actvs = 0 ;
 
     // Cria tratador de ticks, usando UNIX signals
     tick_action.sa_handler = tick_handler ;
@@ -139,6 +155,12 @@ void ppos_init () {
     
     return ;
 }
+
+static void print_task_sum() {
+    printf("Task %d exit: execution time %6d ms, processor %6d ms, %4d activations\n",
+                                            TaskCurr->id, TaskCurr->t_end - TaskCurr->t_ini,
+                                            TaskCurr->t_proc, TaskCurr->actvs) ;
+}
 // =============== Funções gerais ===============
 
 // =============== Gerência de tarefas ===============
@@ -163,6 +185,9 @@ int task_init (task_t *task,			// descritor da nova tarefa
     task->id = idCounter++ ;
     task_setprio(task, PPOS_DEFAULT_PRIO) ;
     task->is_sys = 0 ;
+    task->t_ini = systime() ;
+    task->t_proc = 0 ;
+    task->actvs = 0 ;
 
     // Coloca tarefa na fila de prontas
     if (queue_append((queue_t **) &TaskQueue, (queue_t *) task) < 0)
@@ -185,17 +210,21 @@ void task_exit (int exit_code) {
 #ifdef DEBUG
     PPOS_DEBUG("Saindo task %d.", task_id()) ;
 #endif
+    TaskCurr->t_end = systime() ;
     // Dispatcher é a última tarefa a terminar
     if (TaskCurr == TaskDispatcher) {
+        TaskCurr->t_proc += systime() - task_curr_time ;
 #ifdef DEBUG
         PPOS_DEBUG("%s", "Saindo Main.") ;
 #endif
+        print_task_sum() ;
         free(TaskCurr->context.uc_stack.ss_sp) ;
         exit(exit_code) ;
     }
 #ifdef DEBUG
     PPOS_DEBUG("%s", "Voltando para task dispatcher") ;
 #endif
+    print_task_sum() ;
     TaskCurr->status = PPOS_TERMINADA ;
     task_switch(TaskDispatcher) ;
 }
@@ -207,6 +236,14 @@ int task_switch (task_t *task) {
 
     if (task == TaskCurr)
         return PPOS_TASK_OK_CODE ;
+
+    // TaskCurr -> task
+    // Contando tempo de proc de TaskCurr
+    TaskCurr->t_proc += systime() - task_curr_time ;
+    // Incrementando task->actvs
+    task->actvs++ ;
+    // Reseta tempo de execução da TaskCurr
+    task_curr_time = systime() ;
 
     // Salva task atual para trocar dela para task_t *task
     aux = TaskCurr ;
@@ -231,6 +268,7 @@ void task_yield () {
 #endif
     task_switch(TaskDispatcher) ;
 }
+
 void task_setprio (task_t *task, int prio) {
     if (task == NULL){
         TaskCurr->prio = CLAMP(prio) ;
