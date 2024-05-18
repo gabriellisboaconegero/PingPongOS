@@ -27,7 +27,13 @@ int hardwork (int n)
 // corpo das threads
 void Body (void * arg)
 {
-   int i, max ;
+   int i, max, ec;
+
+   if (task_id() != Pung.id){
+       printf ("%s: esperando Pung...\n", (char *)arg) ;
+       ec = task_wait (&Pung) ;
+       printf ("%s: Pung acabou com exit code %d\n", (char *)arg,  ec) ;
+   }
 
    max = task_id() * 2 ;
 
@@ -55,31 +61,31 @@ int main (int argc, char *argv[])
    task_init (&Pong, Body, "                Pong") ;
    task_init (&Pung, Body, "                    Pung") ;
 
-   for (i=0; i<2; i++)
-   {
-      printf ("main: %d\n", i) ;
-      hardwork (WORKLOAD) ;
-   }
+   /* for (i=0; i<2; i++) */
+   /* { */
+   /*    printf ("main: %d\n", i) ; */
+   /*    hardwork (WORKLOAD) ; */
+   /* } */
 
-   printf ("main: esperando Pang...\n") ;
-   ec = task_wait (&Pang) ;
-   printf ("main: Pang acabou com exit code %d\n", ec) ;
+   /* printf ("main: esperando Pung...\n") ; */
+   /* ec = task_wait (&Pung) ; */
+   /* printf ("main: Pung acabou com exit code %d\n", ec) ; */
 
-   printf ("main: esperando Peng...\n") ;
-   ec = task_wait (&Peng) ;
-   printf ("main: Peng acabou com exit code %d\n", ec) ;
+   /* printf ("main: esperando Pang...\n") ; */
+   /* ec = task_wait (&Pang) ; */
+   /* printf ("main: Pang acabou com exit code %d\n", ec) ; */
 
-   printf ("main: esperando Ping...\n") ;
-   ec = task_wait (&Ping) ;
-   printf ("main: Ping acabou com exit code %d\n", ec) ;
+   /* printf ("main: esperando Peng...\n") ; */
+   /* ec = task_wait (&Peng) ; */
+   /* printf ("main: Peng acabou com exit code %d\n", ec) ; */
 
-   printf ("main: esperando Pong...\n") ;
-   ec = task_wait (&Pong) ;
-   printf ("main: Pong acabou com exit code %d\n", ec) ;
+   /* printf ("main: esperando Ping...\n") ; */
+   /* ec = task_wait (&Ping) ; */
+   /* printf ("main: Ping acabou com exit code %d\n", ec) ; */
 
-   printf ("main: esperando Pung...\n") ;
-   ec = task_wait (&Pung) ;
-   printf ("main: Pung acabou com exit code %d\n", ec) ;
+   /* printf ("main: esperando Pong...\n") ; */
+   /* ec = task_wait (&Pong) ; */
+   /* printf ("main: Pong acabou com exit code %d\n", ec) ; */
 
    printf ("main: fim\n");
 
