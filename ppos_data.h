@@ -23,6 +23,8 @@ typedef struct task_t
   unsigned int t_ini, t_end ;   // Tempo de inicio e fim (task_init, task_end)
   unsigned int t_proc ;         // Tempo gasto na CPU
   unsigned int actvs ;          // Quantas vezes foi colocado na CPU
+  struct task_t *wait_queue ;   // Fila de tasks esperando essa task terminar
+  int ret_cod ;                 // Código de retorno da tarefa
   // ... (outros campos serão adicionados mais tarde)
 } task_t ;
 
