@@ -27,11 +27,19 @@
 #define MIN(a, b) ((a) > (b) ? (b) : (a))
 #define CLAMP(v) (MAX(MIN((v), PPOS_MAX_PRIO), PPOS_MIN_PRIO))
 
+// Alocação global das tarefas mais e dispatcher
 static task_t __TaskDispatcher ;
 static task_t __TaskMain ;
+// Ponteiros para as alocações globais
 static task_t *TaskCurr = &__TaskMain ;
-static task_t *TaskQueue ;
 static task_t *TaskDispatcher = &__TaskDispatcher ;
+
+// Fila de tarefas prontas
+static task_t *ReadyQueue ;
+// Fila de tarefas dormindo
+static task_t *SleepQueue ;
+// Tarefa com menor tempo para acordar
+static task_t *MinTaskAwake ;
 
 // ============= Global vars =============
 // Contador de id's das tasks, diz qual o id da próxima task a ser criada
@@ -122,7 +130,7 @@ void ppos_init () {
     setvbuf (stdout, 0, _IONBF, 0) ;
 
     // Coloca main na fila de prontas
-    if (queue_append((queue_t **) &TaskQueue, (queue_t *) TaskCurr) < 0)
+    if (queue_append((queue_t **) &ReadyQueue, (queue_t *) TaskCurr) < 0)
         return ;
 
     // Configura a task main
@@ -154,7 +162,7 @@ void ppos_init () {
     task_init(TaskDispatcher, dispatcher, NULL) ;
     TaskDispatcher->is_sys = 1 ;
 #ifdef DEBUG
-    queue_print("Tasks", (queue_t *) TaskQueue, print_task) ;
+    queue_print("Tasks", (queue_t *) ReadyQueue, print_task) ;
 #endif
     // Arma temporizador logo antes de ir para dispatcher
     if (setitimer(ITIMER_REAL, &tick_timer, 0) < 0) {
@@ -203,7 +211,7 @@ static int kernel_task_init (task_t *task,			// descritor da nova tarefa
     task->actvs = 0 ;
 
     // Coloca tarefa na fila de prontas
-    if (queue_append((queue_t **) &TaskQueue, (queue_t *) task) < 0)
+    if (queue_append((queue_t **) &ReadyQueue, (queue_t *) task) < 0)
         return PPOS_TASK_ERROR_CODE ;
 
     task->status = PPOS_PRONTA ;
@@ -306,7 +314,7 @@ static void kernel_task_suspend (task_t **queue) {
 #endif
     // Se task->prev não for NULL quer dizer que está em uma fila, 
     // Se for NULL quer dizer que não está em uma fila
-    if (TaskCurr->prev != NULL && queue_remove((queue_t **) &TaskQueue, (queue_t *) TaskCurr) < 0)
+    if (TaskCurr->prev != NULL && queue_remove((queue_t **) &ReadyQueue, (queue_t *) TaskCurr) < 0)
         exit(1) ;
     TaskCurr->status = PPOS_SUSPENSA ;
     if (queue_append((queue_t **) queue, (queue_t *) TaskCurr) < 0)
@@ -327,7 +335,7 @@ static void kernel_task_awake (task_t *task, task_t **queue) {
     if (queue_remove((queue_t **) queue, (queue_t *) task) < 0)
         exit(1) ;
     TaskCurr->status = PPOS_PRONTA ;
-    if (queue_append((queue_t **) &TaskQueue, (queue_t *) task) < 0)
+    if (queue_append((queue_t **) &ReadyQueue, (queue_t *) task) < 0)
         exit(1) ;
 }
 
@@ -353,6 +361,23 @@ inline int task_wait (task_t *task) {
     int ans = kernel_task_wait(task) ;
     kernel_unlock() ;
     return ans ;
+}
+
+
+static void kernel_task_sleep (int t) {
+    // Não colocar o dispatcher na fila de dorminhocas
+    if (TaskCurr == TaskDispatcher)
+        return ;
+    TaskCurr->awake_t = systime() + t ;
+    if (MinTaskAwake == NULL || TaskCurr->awake_t < MinTaskAwake->awake_t)
+        MinTaskAwake = TaskCurr ;
+    kernel_task_suspend(&SleepQueue) ;
+}
+
+inline void task_sleep (int t) {
+    kernel_lock() ;
+    kernel_task_sleep(t) ;
+    kernel_unlock() ;
 }
 // =============== Gerência de tarefas ===============
 
@@ -392,15 +417,15 @@ inline int task_getprio (task_t *task) {
 }
 
 static task_t *scheduler(void) {
-    task_t *it = TaskQueue ;
+    task_t *it = ReadyQueue ;
     task_t *min_prio = it ;
 
     // Se não tiver mais tasks para ser executadas
     if (it == NULL)
-        return TaskQueue ;
+        return ReadyQueue ;
 
     it = it->next ;
-    while (it != TaskQueue){
+    while (it != ReadyQueue){
         if (it->dprio < min_prio->dprio){
             min_prio->dprio = CLAMP(min_prio->dprio + PPOS_PRIO_DELTA) ;
             min_prio = it ;
@@ -411,9 +436,9 @@ static task_t *scheduler(void) {
     }
 #ifdef DEBUG
     printf("MIN_DPRIO: %d (%d)\n", min_prio->id, min_prio->dprio) ;
-    queue_print("Tasks Prio", (queue_t *) TaskQueue, print_task_prio) ;
+    queue_print("Tasks Prio", (queue_t *) ReadyQueue, print_task_prio) ;
 #endif
-    if (queue_remove((queue_t **)&TaskQueue, (queue_t *)min_prio) < 0)
+    if (queue_remove((queue_t **)&ReadyQueue, (queue_t *)min_prio) < 0)
         exit(1) ;
 
     return min_prio ;
@@ -427,6 +452,18 @@ static void awake_task_queue(task_t *task) {
         kernel_task_awake(task->wait_queue, &task->wait_queue) ;
 }
 
+static void check_sleep_queue() {
+    if (!queue_size((queue_t *) SleepQueue))
+        return ;
+    if (systime() < MinTaskAwake->awake_t)
+        return ;
+    task_t *it = SleepQueue;
+    while(it != SleepQueue){
+        if (it->awake_t <= systime())
+            kernel_task_awake(it, &SleepQueue) ;
+    }
+}
+
 static void dispatcher(void * arg) {
     (void)arg ;
     task_t *proxima ;
@@ -434,13 +471,14 @@ static void dispatcher(void * arg) {
     PPOS_DEBUG("%s", "Iniciando dispatcher") ;
 #endif
     // Remove o dispatcher da fila de prontos
-    if (queue_remove((queue_t **) &TaskQueue, (queue_t *) TaskDispatcher) < 0) {
+    if (queue_remove((queue_t **) &ReadyQueue, (queue_t *) TaskDispatcher) < 0) {
         fprintf(stderr, "[UNREACHABLE]: Não deveria chegar aqui\n") ;
         exit(1) ;
     }
 
     // Enquanto tiver tasks para executar na fila de prontos
-    while (queue_size((queue_t *) TaskQueue)) {
+    while (queue_size((queue_t *) ReadyQueue) || queue_size((queue_t *) SleepQueue)) {
+        check_sleep_queue() ;
         proxima = scheduler() ;
         if (proxima != NULL) {
             proxima->status = PPOS_RODANDO ;
@@ -453,7 +491,7 @@ static void dispatcher(void * arg) {
             
             switch (proxima->status) {
                 case PPOS_TERMINADA:
-                    /* if (queue_remove((queue_t **) &TaskQueue, (queue_t *) proxima) < 0) */
+                    /* if (queue_remove((queue_t **) &ReadyQueue, (queue_t *) proxima) < 0) */
                     /*     exit(1); */
                     awake_task_queue(proxima) ;
                     if (proxima != &__TaskMain)
@@ -461,7 +499,7 @@ static void dispatcher(void * arg) {
                     break ;
                 case PPOS_PRONTA:
                     // Coloca na fila de prontas de volta
-                    if (queue_append((queue_t **) &TaskQueue, (queue_t *) proxima) < 0)
+                    if (queue_append((queue_t **) &ReadyQueue, (queue_t *) proxima) < 0)
                         exit(1) ;
                     // Tarefa executada, restaura sua prioridade fixa
                     proxima->dprio = proxima->prio ;

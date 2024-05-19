@@ -25,6 +25,7 @@ typedef struct task_t
   unsigned int actvs ;          // Quantas vezes foi colocado na CPU
   struct task_t *wait_queue ;   // Fila de tasks esperando essa task terminar
   int ret_cod ;                 // Código de retorno da tarefa
+  unsigned int awake_t ;        // Tempo em que a tarefa deve ser acordada
   // ... (outros campos serão adicionados mais tarde)
 } task_t ;
 
