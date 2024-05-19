@@ -83,6 +83,17 @@ static void print_task_prio (void *ptr) {
    elem->next ? printf ("%d", elem->next->id) : printf ("*") ;
 }
 
+static void print_task_awake_time (void *ptr) {
+   task_t *elem = ptr ;
+
+   if (!elem)
+      return ;
+
+   elem->prev ? printf ("%d", elem->prev->id) : printf ("*") ;
+   printf ("<%d (%d)>", elem->id, elem->awake_t) ;
+   elem->next ? printf ("%d", elem->next->id) : printf ("*") ;
+}
+
 #endif
 
 // =============== Funções de preempção  ===============
@@ -310,7 +321,7 @@ void task_yield () {
 
 static void kernel_task_suspend (task_t **queue) {
 #ifdef DEBUG
-    PPOS_DEBUG("Task %d suspensa", task_id()) ;
+    PPOS_DEBUG("Task %d suspensa (%d)", task_id(), systime()) ;
 #endif
     // Se task->prev não for NULL quer dizer que está em uma fila, 
     // Se for NULL quer dizer que não está em uma fila
@@ -330,7 +341,7 @@ inline void task_suspend (task_t **queue) {
 
 static void kernel_task_awake (task_t *task, task_t **queue) {
 #ifdef DEBUG
-    PPOS_DEBUG("Task %d acordada", task->id) ;
+    PPOS_DEBUG("Task %d acordada (%d)", task->id, systime()) ;
 #endif
     if (queue_remove((queue_t **) queue, (queue_t *) task) < 0)
         exit(1) ;
@@ -455,13 +466,42 @@ static void awake_task_queue(task_t *task) {
 static void check_sleep_queue() {
     if (!queue_size((queue_t *) SleepQueue))
         return ;
+    // Não verificando MinTaskAwake == NULL pois é redundante
+    // Se não tiver atrefa dormindo então MinTaskAwake deve ser NULL
+    // Se tiver errado a implementação é melhor que de segfault
+    // Ajuda a pegar o erro.
     if (systime() < MinTaskAwake->awake_t)
         return ;
-    task_t *it = SleepQueue;
+    MinTaskAwake = NULL ;
+
+    // Começa iteração pela segunda task da lista
+    task_t *it = SleepQueue->next ;
+    // Itera até voltar para primeira task
     while(it != SleepQueue){
-        if (it->awake_t <= systime())
-            kernel_task_awake(it, &SleepQueue) ;
+        // Verifica se a task deve se acordada
+        if (it->awake_t <= systime()){
+            // Atualiza it para a próxima iteração
+            it = it->next ;
+            // Acorda task
+            kernel_task_awake(it->prev, &SleepQueue) ;
+        }else{
+            // Verifica se é a task de menor tempo
+            if (MinTaskAwake == NULL || it->awake_t < MinTaskAwake->awake_t)
+                MinTaskAwake = it ;
+            it = it->next ;
+        }
     }
+
+    // Verifica se a  primeira task deve ser retirada
+    if (it->awake_t <= systime())
+        kernel_task_awake(it, &SleepQueue) ;
+    else if (MinTaskAwake == NULL || it->awake_t < MinTaskAwake->awake_t)
+        MinTaskAwake = it ;
+#ifdef DEBUG
+    if (MinTaskAwake != NULL)
+        printf("MIN_AWAKE_TASK: %d (%d)\n", MinTaskAwake->id, MinTaskAwake->awake_t) ;
+    queue_print("Tasks Awake Time", (queue_t *) SleepQueue, print_task_awake_time) ;
+#endif
 }
 
 static void dispatcher(void * arg) {

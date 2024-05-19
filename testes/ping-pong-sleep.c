@@ -21,7 +21,7 @@ void Body (void * arg)
    for (i=0; i<20; i++)
    {
       // sorteia tempo entre 0 e 2000 ms (2s), em saltos de 100 ms
-      timeSleep = 100 * (random () % 21) ;
+      timeSleep = 1 * (random () % 2001) ;
 
       // informa o quanto vai dormir
       printf ("%5d ms: %s vai dormir %d ms\n",
@@ -47,6 +47,7 @@ int main (int argc, char *argv[])
 {
    // inicializacao do SO
    ppos_init () ;
+   srand(13711044);
 
    printf ("%5d ms: main: inicio\n", systime()) ;
 
