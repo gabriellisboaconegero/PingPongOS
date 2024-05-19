@@ -1,5 +1,5 @@
 CFLAGS = -Wall -Wextra
-PROJETO = p4
+PROJETO = p9
 
 all: obj exe testes/ping-pong-sleep
 
@@ -57,5 +57,5 @@ clean:
 	rm -rf exe/* obj/* testes/ping-pong-tasks{1..3} testes/testafila testes/ping-pong-dispatcher testes/ping-pong-scheduler
 
 build: all
-	tar --exclude=testes --exclude=obj --exclude=.git -czvf $(PROJETO).tar.gz *
+	tar --exclude=exe --exclude=testes --exclude=obj --exclude=.git -czvf $(PROJETO).tar.gz *
 # ============ misc ============
