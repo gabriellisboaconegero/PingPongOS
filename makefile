@@ -1,7 +1,7 @@
 CFLAGS = -Wall -Wextra
 PROJETO = p9
 
-all: obj exe testes/ping-pong-sleep
+all: obj exe testes/ping-pong-preempcao-stress
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all

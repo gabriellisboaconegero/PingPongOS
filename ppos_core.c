@@ -52,13 +52,14 @@ static struct itimerval tick_timer ;
 static unsigned int ppos_time = 0 ;
 
 static unsigned int task_curr_time = 0 ;
-
-int kernel_locked = 0 ;
 // ============= Global vars =============
 
 // =============== Funções de escalonamento  ===============
 static void dispatcher(void * arg) ;
 // =============== Funções de escalonamento  ===============
+// Definie funções wrappers e de kernel
+// Vem aqui para poder acessar TaskCurr, etc.
+#include "ppos_kernel_funcs.h"
 
 #ifdef DEBUG
 static void print_task (void *ptr) {
@@ -104,7 +105,8 @@ static void tick_handler(int signum) {
 #endif
     // A cada tick incremeta o número de milisegundos passados
     ppos_time += PPOS_TICK_DELTA/1000 ;
-    if (TaskCurr->is_sys || kernel_locked)
+    // Se a tarefa for de sistema ou estiver executando uma kernel function
+    if (TaskCurr->is_sys || TaskCurr->is_sys_func > 0)
         return ;
        
     TaskCurr->quanta-- ;
@@ -113,7 +115,7 @@ static void tick_handler(int signum) {
     PPOS_DEBUG("Task %d quanta [%d]", TaskCurr->id, TaskCurr->quanta) ;
 #endif
     if (TaskCurr->quanta <= 0){
-        task_yield() ;
+        kernel_task_yield() ;
     }
 }
 // =============== Funções de preempção  ===============
@@ -125,19 +127,10 @@ inline unsigned int systime () {
 // =============== Funções de Medida de tempo  ===============
 
 // =============== Funções gerais ===============
-inline static void kernel_lock(){
-    kernel_locked = 1;
-}
-
-inline static void kernel_unlock(){
-    kernel_locked = 0;
-}
-
 void ppos_init () {
 #ifdef DEBUG
     PPOS_DEBUG("%s", "Inicializando PpOS\n") ;
 #endif
-    kernel_lock() ;
     setvbuf (stdout, 0, _IONBF, 0) ;
 
     // Coloca main na fila de prontas
@@ -148,8 +141,12 @@ void ppos_init () {
     getcontext(&TaskCurr->context) ;
     TaskCurr->id = idCounter++ ;
     TaskCurr->status = PPOS_RODANDO ;
-    task_setprio(NULL, PPOS_DEFAULT_PRIO) ;
+    kernel_task_setprio(NULL, PPOS_DEFAULT_PRIO) ;
     TaskCurr->is_sys = 0 ;
+    TaskCurr->is_sys_func = 0 ;
+    // Igual a TaskCurr->is_sys_func = 1 ;
+    kernel_lock() ;
+
     TaskCurr->t_ini = systime() ;
     TaskCurr->t_proc = 0 ;
     TaskCurr->actvs = 0 ;
@@ -170,7 +167,7 @@ void ppos_init () {
     tick_timer.it_interval.tv_sec  = 0 ;   // disparos subsequentes, em segundos
 
     // Inicia dispatcher
-    task_init(TaskDispatcher, dispatcher, NULL) ;
+    kernel_task_init(TaskDispatcher, dispatcher, NULL) ;
     TaskDispatcher->is_sys = 1 ;
 #ifdef DEBUG
     queue_print("Tasks", (queue_t *) ReadyQueue, print_task) ;
@@ -182,7 +179,7 @@ void ppos_init () {
     }
 
     // Para já tirar o dispatcher da fila de prontos
-    task_switch(TaskDispatcher) ;
+    kernel_task_switch(TaskDispatcher) ;
     
     kernel_unlock() ;
     return ;
@@ -215,7 +212,7 @@ static int kernel_task_init (task_t *task,			// descritor da nova tarefa
     task->context.uc_link = 0 ;
     makecontext(&task->context, (void (*)(void))start_func, 1, arg) ;
     task->id = idCounter++ ;
-    task_setprio(task, PPOS_DEFAULT_PRIO) ;
+    kernel_task_setprio(task, PPOS_DEFAULT_PRIO) ;
     task->is_sys = 0 ;
     task->t_ini = systime() ;
     task->t_proc = 0 ;
@@ -233,22 +230,14 @@ static int kernel_task_init (task_t *task,			// descritor da nova tarefa
     return task->id ;
 }
 
-inline int task_init (task_t *task, void (*start_func)(void *), void *arg) {
-    kernel_lock() ;
-    int ans = kernel_task_init(task, start_func, arg) ;
-    kernel_unlock() ;
-    return ans ;
-}
-
 inline int task_id () {
     return TaskCurr->id ;
 }
 
-void task_exit (int exit_code) {
+static void kernel_task_exit(int exit_code) {
 #ifdef DEBUG
     PPOS_DEBUG("Saindo task %d.", task_id()) ;
 #endif
-    kernel_lock() ;
     TaskCurr->t_end = systime() ;
     // Dispatcher é a última tarefa a terminar
     if (TaskCurr == TaskDispatcher) {
@@ -266,9 +255,8 @@ void task_exit (int exit_code) {
     print_task_sum() ;
     TaskCurr->status = PPOS_TERMINADA ;
     TaskCurr->ret_cod = exit_code ;
-    task_switch(TaskDispatcher) ;
+    kernel_task_switch(TaskDispatcher) ;
     fprintf(stderr, "[UNREACHABLE][%s]: Não deveria chegar aqui, função ja terminada\n", __func__) ;
-    kernel_unlock() ;
 }
 
 static int kernel_task_switch (task_t *task) {
@@ -295,28 +283,18 @@ static int kernel_task_switch (task_t *task) {
 
     // Muda task atual para a task_t *task
     TaskCurr = task ;
-    kernel_unlock() ;
     swapcontext(&aux->context, &task->context) ;
 
     return PPOS_TASK_OK_CODE ;
 }
 
-inline int task_switch (task_t *task) {
-    kernel_lock() ;
-    int ans = kernel_task_switch(task) ;
-    kernel_unlock() ;
-    return ans ;
-}
-
-void task_yield () {
-    kernel_lock() ;
+static void kernel_task_yield () {
     TaskCurr->status = PPOS_PRONTA ;
 
 #ifdef DEBUG
     PPOS_DEBUG("Yield da task %d, indo para dispatcher (%d)", task_id(), TaskDispatcher->id) ;
 #endif
-    task_switch(TaskDispatcher) ;
-    kernel_unlock() ;   
+    kernel_task_switch(TaskDispatcher) ;
 }
 
 static void kernel_task_suspend (task_t **queue) {
@@ -330,13 +308,7 @@ static void kernel_task_suspend (task_t **queue) {
     TaskCurr->status = PPOS_SUSPENSA ;
     if (queue_append((queue_t **) queue, (queue_t *) TaskCurr) < 0)
         exit(1) ;
-    task_switch(TaskDispatcher) ;
-}
-
-inline void task_suspend (task_t **queue) {
-    kernel_lock() ;
-    kernel_task_suspend(queue) ;
-    kernel_unlock() ;
+    kernel_task_switch(TaskDispatcher) ;
 }
 
 static void kernel_task_awake (task_t *task, task_t **queue) {
@@ -350,12 +322,6 @@ static void kernel_task_awake (task_t *task, task_t **queue) {
         exit(1) ;
 }
 
-inline void task_awake (task_t *task, task_t **queue) {
-    kernel_lock() ;
-    kernel_task_awake(task, queue) ;
-    kernel_unlock() ;
-}
-
 static int kernel_task_wait (task_t *task) {
 #ifdef DEBUG
     PPOS_DEBUG("Task %d esperando por Task %d", task_id(), task->id) ;
@@ -367,14 +333,6 @@ static int kernel_task_wait (task_t *task) {
     return task->ret_cod ;
 }
 
-inline int task_wait (task_t *task) {
-    kernel_lock() ;
-    int ans = kernel_task_wait(task) ;
-    kernel_unlock() ;
-    return ans ;
-}
-
-
 static void kernel_task_sleep (int t) {
     // Não colocar o dispatcher na fila de dorminhocas
     if (TaskCurr == TaskDispatcher)
@@ -385,11 +343,6 @@ static void kernel_task_sleep (int t) {
     kernel_task_suspend(&SleepQueue) ;
 }
 
-inline void task_sleep (int t) {
-    kernel_lock() ;
-    kernel_task_sleep(t) ;
-    kernel_unlock() ;
-}
 // =============== Gerência de tarefas ===============
 
 // =============== Funções de escalonamento  ===============
@@ -404,27 +357,10 @@ static void kernel_task_setprio (task_t *task, int prio) {
     task->dprio = task->prio;
 }
 
-inline void task_setprio (task_t *task, int prio) {
-    kernel_lock() ;
-
-    kernel_task_setprio(task, prio) ;
-
-    kernel_unlock() ;
-}
-
 static int kernel_task_getprio (task_t *task) {
     if (task == NULL)
         return TaskCurr->prio ;
     return task->prio ;
-}
-
-inline int task_getprio (task_t *task) {
-    kernel_lock() ;
-
-    int ans = kernel_task_getprio(task) ;
-
-    kernel_unlock() ;
-    return ans ;
 }
 
 static task_t *scheduler(void) {
@@ -527,7 +463,7 @@ static void dispatcher(void * arg) {
 #endif
             proxima->quanta = PPOS_QUANTA ;
             // Executa task proxima
-            task_switch(proxima) ;
+            kernel_task_switch(proxima) ;
             
             switch (proxima->status) {
                 case PPOS_TERMINADA:
@@ -553,6 +489,6 @@ static void dispatcher(void * arg) {
         }
     }
 
-    task_exit(0) ;
+    kernel_task_exit(0) ;
 }
 // =============== Funções de escalonamento  ===============
