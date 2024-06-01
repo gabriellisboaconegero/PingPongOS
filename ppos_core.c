@@ -59,7 +59,9 @@ static void dispatcher(void * arg) ;
 // =============== Funções de escalonamento  ===============
 // Definie funções wrappers e de kernel
 // Vem aqui para poder acessar TaskCurr, etc.
+#define PPOS_KERNEL_FUNCS_IMPL
 #include "ppos_kernel_funcs.h"
+#undef PPOS_KERNEL_FUNCS_IMPL
 
 #ifdef DEBUG
 static void print_task (void *ptr) {
@@ -193,7 +195,7 @@ static void print_task_sum() {
 // =============== Funções gerais ===============
 
 // =============== Gerência de tarefas ===============
-static int kernel_task_init (task_t *task,			// descritor da nova tarefa
+int kernel_task_init (task_t *task,			// descritor da nova tarefa
                void  (*start_func)(void *),	// funcao corpo da tarefa
                void   *arg) {			// argumentos para a tarefa
     char *stack ;
@@ -234,7 +236,7 @@ inline int task_id () {
     return TaskCurr->id ;
 }
 
-static void kernel_task_exit(int exit_code) {
+void kernel_task_exit(int exit_code) {
 #ifdef DEBUG
     PPOS_DEBUG("Saindo task %d.", task_id()) ;
 #endif
@@ -259,7 +261,7 @@ static void kernel_task_exit(int exit_code) {
     fprintf(stderr, "[UNREACHABLE][%s]: Não deveria chegar aqui, função ja terminada\n", __func__) ;
 }
 
-static int kernel_task_switch (task_t *task) {
+int kernel_task_switch (task_t *task) {
     task_t *aux ;
     if (task == NULL)
         return PPOS_TASK_ERROR_CODE ;
@@ -288,7 +290,7 @@ static int kernel_task_switch (task_t *task) {
     return PPOS_TASK_OK_CODE ;
 }
 
-static void kernel_task_yield () {
+void kernel_task_yield () {
     TaskCurr->status = PPOS_PRONTA ;
 
 #ifdef DEBUG
@@ -297,7 +299,7 @@ static void kernel_task_yield () {
     kernel_task_switch(TaskDispatcher) ;
 }
 
-static void kernel_task_suspend (task_t **queue) {
+void kernel_task_suspend (task_t **queue) {
 #ifdef DEBUG
     PPOS_DEBUG("Task %d suspensa (%d)", task_id(), systime()) ;
 #endif
@@ -311,7 +313,7 @@ static void kernel_task_suspend (task_t **queue) {
     kernel_task_switch(TaskDispatcher) ;
 }
 
-static void kernel_task_awake (task_t *task, task_t **queue) {
+void kernel_task_awake (task_t *task, task_t **queue) {
 #ifdef DEBUG
     PPOS_DEBUG("Task %d acordada (%d)", task->id, systime()) ;
 #endif
@@ -322,7 +324,7 @@ static void kernel_task_awake (task_t *task, task_t **queue) {
         exit(1) ;
 }
 
-static int kernel_task_wait (task_t *task) {
+int kernel_task_wait (task_t *task) {
 #ifdef DEBUG
     PPOS_DEBUG("Task %d esperando por Task %d", task_id(), task->id) ;
 #endif
@@ -333,7 +335,7 @@ static int kernel_task_wait (task_t *task) {
     return task->ret_cod ;
 }
 
-static void kernel_task_sleep (int t) {
+void kernel_task_sleep (int t) {
     // Não colocar o dispatcher na fila de dorminhocas
     if (TaskCurr == TaskDispatcher)
         return ;
@@ -346,7 +348,7 @@ static void kernel_task_sleep (int t) {
 // =============== Gerência de tarefas ===============
 
 // =============== Funções de escalonamento  ===============
-static void kernel_task_setprio (task_t *task, int prio) {
+void kernel_task_setprio (task_t *task, int prio) {
     if (task == NULL){
         TaskCurr->prio = CLAMP(prio) ;
         TaskCurr->dprio = TaskCurr->prio;
@@ -357,7 +359,7 @@ static void kernel_task_setprio (task_t *task, int prio) {
     task->dprio = task->prio;
 }
 
-static int kernel_task_getprio (task_t *task) {
+int kernel_task_getprio (task_t *task) {
     if (task == NULL)
         return TaskCurr->prio ;
     return task->prio ;

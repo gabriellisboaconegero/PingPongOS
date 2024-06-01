@@ -1,7 +1,8 @@
 CFLAGS = -Wall -Wextra
 PROJETO = p9
+LIBS = obj/queue.o obj/ppos_ipc.o
 
-all: obj exe testes/ping-pong-preempcao-stress
+all: obj exe testes/ping-pong-racecond
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
@@ -10,7 +11,7 @@ debug: all
 obj/ping-pong-tasks%.o: testes/ping-pong-tasks%.c
 	gcc $(CFLAGS) -I $$PWD -c $^ -o $@
 
-testes/ping-pong-tasks%: obj/ping-pong-tasks%.o obj/ppos_core.o obj/queue.o
+testes/ping-pong-tasks%: obj/ping-pong-tasks%.o obj/ppos_core.o $(LIBS)
 	gcc $^ -o $@
 
 obj/testafila.o: testes/testafila.c
@@ -22,19 +23,19 @@ testes/testafila: obj/testafila.o obj/queue.o
 obj/ping-pong-dispatcher.o: testes/ping-pong-dispatcher.c
 	gcc $(CFLAGS) -I $$PWD -c $^ -o $@
 
-testes/ping-pong-dispatcher: obj/ping-pong-dispatcher.o obj/ppos_core.o obj/queue.o
+testes/ping-pong-dispatcher: obj/ping-pong-dispatcher.o obj/ppos_core.o $(LIBS)
 	gcc $^ -o $@
 
 obj/ping-pong-scheduler.o: testes/ping-pong-scheduler.c
 	gcc $(CFLAGS) -I $$PWD -c $^ -o $@
 
-testes/ping-pong-scheduler: obj/ping-pong-scheduler.o obj/ppos_core.o obj/queue.o
+testes/ping-pong-scheduler: obj/ping-pong-scheduler.o obj/ppos_core.o $(LIBS)
 	gcc $^ -o $@
 
 obj/ping-pong-%.o: testes/ping-pong-%.c
 	gcc $(CFLAGS) -I $$PWD -c $^ -o $@
 
-testes/ping-pong-%: obj/ping-pong-%.o obj/ppos_core.o obj/queue.o
+testes/ping-pong-%: obj/ping-pong-%.o obj/ppos_core.o $(LIBS)
 	gcc $^ -o exe/"`basename $@`"
 # ============ testes ============
 
@@ -50,6 +51,10 @@ obj/queue.o: queue.c queue.h
 
 obj/ppos_core.o: ppos_core.c ppos.h ppos_data.h 
 	gcc $(CFLAGS) -c ppos_core.c -o $@
+
+obj/ppos_ipc.o: ppos_ipc.c
+	gcc $(CFLAGS) -c ppos_ipc.c -o $@
+
 # ============ objects ============
 
 # ============ misc ============
