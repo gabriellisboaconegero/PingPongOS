@@ -5,7 +5,7 @@
 #define PPOS_SEM_OK 0
 
 int kernel_sem_init (semaphore_t *s, int value) {
-    if (s == NULL)
+    if (s == NULL || s->dead)
         return PPOS_SEM_ERROR ;
     s->cont = value ;
     s->task_queue = NULL ;
