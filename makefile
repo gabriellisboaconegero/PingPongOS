@@ -2,7 +2,7 @@ CFLAGS = -Wall -Wextra
 PROJETO = p9
 LIBS = obj/queue.o obj/ppos_ipc.o
 
-all: obj exe testes/ping-pong-racecond
+all: obj exe testes/ping-pong-prodcons testes/ping-pong-prodcons-v2
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
