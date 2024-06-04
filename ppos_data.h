@@ -10,6 +10,30 @@
 #include <ucontext.h>		// biblioteca POSIX de trocas de contexto
 #include "queue.h"
 
+#define PPOS_DEBUG(msg, ...) printf("PPOS[%s]: "msg"\n", __func__, __VA_ARGS__)
+
+#define MAX(a, b) ((a) < (b) ? (b) : (a))
+#define MIN(a, b) ((a) > (b) ? (b) : (a))
+#define CLAMP(v, M, m) (MAX(MIN((v), (M)), m))
+
+#define PPOS_TASK_ERROR_CODE -1
+#define PPOS_TASK_OK_CODE 0
+#define PPOS_STACK_SZ 1<<16
+
+#define PPOS_RODANDO 0
+#define PPOS_PRONTA 1
+#define PPOS_TERMINADA 2
+#define PPOS_SUSPENSA 3
+
+#define PPOS_DEFAULT_PRIO 0
+#define PPOS_MAX_PRIO 20
+#define PPOS_MIN_PRIO -20
+#define PPOS_PRIO_DELTA -1
+
+#define PPOS_QUANTA 10
+// EM micro segundos (1000 micro = 1 mili)
+#define PPOS_TICK_DELTA 1000
+#define CLAMP_PRIO(v) CLAMP((v), PPOS_MAX_PRIO, PPOS_MIN_PRIO)
 // Estrutura que define um Task Control Block (TCB)
 typedef struct task_t
 {
@@ -30,12 +54,15 @@ typedef struct task_t
                                     // ... (outros campos serão adicionados mais tarde)
 } task_t ;
 
+#define PPOS_SEM_ERROR -1
+#define PPOS_SEM_OK 0
 // estrutura que define um semáforo
 typedef struct
 {
     int cont ;                      // Contador do semaforo
     task_t *task_queue ;            // Fila de tarefas esperando smaforo liberar
     short dead ;                    // Falg de semaforo destruido
+    int lock ;                      // Indica se o semaforo está em seção critica
                                     // preencher quando necessário
 } semaphore_t ;
 

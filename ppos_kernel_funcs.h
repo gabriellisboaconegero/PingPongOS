@@ -6,9 +6,12 @@
 // que TaskCurr está  executando uma tarefa de kernel
 //
 // ATENÇÃO: Lembrar de adicionar toda função nova que deva ser bloqueate
-// Definir no arquivo pricipal em que as funções wrapper deve ser declaradas usando
-// #define PPOS_KERNEL_FUNCS_IMPL antes de #include "ppos_kernel_funcs.h"
-// Isso para poder utilizar o mesmo arquivo como implementação e definição de funções kernel
+//      Definir no arquivo pricipal em que as funções wrapper deve ser declaradas usando
+// ATENÇÃO: #define PPOS_KERNEL_FUNCS_IMPL antes de #include "ppos_kernel_funcs.h"
+//      Isso para poder utilizar o mesmo arquivo como implementação e definição de funções kernel
+// ATENÇÃO: #define PPOS_KERNEL_BUSY_CS antes de #include "ppos_kernel_funcs.h"
+//      Fazer isso se quiser a implementação usando busy wait com operações atômicas
+//      ao invés do mecanismo de exclusão mútua TaskCurr->is_sys_func
 #ifndef __PPOS_KERNEL_FUNCS_H__
 #define __PPOS_KERNEL_FUNCS_H__
 #include "ppos.h"
@@ -22,7 +25,16 @@ inline static void kernel_lock(){
 inline static void kernel_unlock(){
     TaskCurr->is_sys_func = 0 ;
 }
-#endif
+#endif // PPOS_KERNEL_FUNCS_IMPL
+#ifdef PPOS_KERNEL_BUSY_CS
+inline static void sem_enter_cs(int *lock){
+    while(__sync_fetch_and_or(lock, 1)) ;
+}
+
+inline static void sem_leave_cs(int *lock){
+    *lock = 0 ;
+}
+#endif // PPOS_KERNEL_BUSY_CS
 // ================= Funções bloqueantes ===================
 
 int kernel_task_init (task_t *task, void  (*start_func)(void *), void   *arg) ;
@@ -121,43 +133,85 @@ inline int task_wait (task_t *task) {
 
 int kernel_sem_init (semaphore_t *s, int value) ;
 #ifdef PPOS_KERNEL_FUNCS_IMPL
+#ifdef PPOS_KERNEL_BUSY_CS
+inline int sem_init (semaphore_t *s, int value) {
+    if (s != NULL)
+        sem_enter_cs(&s->lock) ;
+    int ans = kernel_sem_init(s, value) ;
+    if (s != NULL)
+        sem_leave_cs(&s->lock) ;
+    return ans ;
+}
+#else
 inline int sem_init (semaphore_t *s, int value) {
     kernel_lock() ;
     int ans = kernel_sem_init(s, value) ;
     kernel_unlock() ;
     return ans ;
 }
-#endif
+#endif // PPOS_KERNEL_FUNCS_IMPL
+#endif // PPOS_KERNEL_BUSY_CS
 
 int kernel_sem_down (semaphore_t *s) ;
 #ifdef PPOS_KERNEL_FUNCS_IMPL
+// ATENÇÃO: sem_down é especial, pois não da para garantir sem_leave_cs
+// antes de fazer o switch, então deve ser dentro da implementação
+// de kernel_sem_down o sem_enter_cs e o sem_leave_cs.
+#ifdef PPOS_KERNEL_BUSY_CS
+inline int sem_down (semaphore_t *s) {
+    return kernel_sem_down(s) ;
+}
+#else
 inline int sem_down (semaphore_t *s) {
     kernel_lock() ;
     int ans = kernel_sem_down(s) ;
     kernel_unlock() ;
     return ans ;
 }
-#endif
+#endif // PPOS_KERNEL_FUNCS_IMPL
+#endif // PPOS_KERNEL_BUSY_CS
 
 int kernel_sem_up (semaphore_t *s) ;
 #ifdef PPOS_KERNEL_FUNCS_IMPL
+#ifdef PPOS_KERNEL_BUSY_CS
+inline int sem_up (semaphore_t *s) {
+    if (s != NULL)
+        sem_enter_cs(&s->lock) ;
+    int ans = kernel_sem_up(s) ;
+    if (s != NULL)
+        sem_leave_cs(&s->lock) ;
+    return ans ;
+}
+#else
 inline int sem_up (semaphore_t *s) {
     kernel_lock() ;
     int ans = kernel_sem_up(s) ;
     kernel_unlock() ;
     return ans ;
 }
-#endif
+#endif // PPOS_KERNEL_FUNCS_IMPL
+#endif // PPOS_KERNEL_BUSY_CS
 
 int kernel_sem_destroy (semaphore_t *s) ;
 #ifdef PPOS_KERNEL_FUNCS_IMPL
+#ifdef PPOS_KERNEL_BUSY_CS
+inline int sem_destroy (semaphore_t *s) {
+    if (s != NULL)
+        sem_enter_cs(&s->lock) ;
+    int ans = kernel_sem_destroy(s) ;
+    if (s != NULL)
+        sem_leave_cs(&s->lock) ;
+    return ans ;
+}
+#else
 inline int sem_destroy (semaphore_t *s) {
     kernel_lock() ;
     int ans = kernel_sem_destroy(s) ;
     kernel_unlock() ;
     return ans ;
 }
-#endif
+#endif // PPOS_KERNEL_FUNCS_IMPL
+#endif // PPOS_KERNEL_BUSY_CS
 // ================= Funções bloqueantes ===================
 
 #endif

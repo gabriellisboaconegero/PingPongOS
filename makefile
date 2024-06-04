@@ -3,6 +3,7 @@ PROJETO = p9
 LIBS = obj/queue.o obj/ppos_ipc.o obj/ppos_mqueue.o
 LLIBS = -lm
 
+# all:   CFLAGS += -DDEBUG_LOCK
 all: obj exe testes/ping-pong-mqueue
 
 debug: CFLAGS+= -DDEBUG -g

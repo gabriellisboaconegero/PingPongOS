@@ -3,39 +3,17 @@
 #include <signal.h>
 #include <sys/time.h>
 #include "ppos.h"
-
-#define PPOS_TASK_ERROR_CODE -1
-#define PPOS_TASK_OK_CODE 0
-#define PPOS_STACK_SZ 1<<16
-#define PPOS_DEBUG(msg, ...) printf("PPOS[%s]: "msg"\n", __func__, __VA_ARGS__)
-
-#define PPOS_RODANDO 0
-#define PPOS_PRONTA 1
-#define PPOS_TERMINADA 2
-#define PPOS_SUSPENSA 3
-
-#define PPOS_DEFAULT_PRIO 0
-#define PPOS_MAX_PRIO 20
-#define PPOS_MIN_PRIO -20
-#define PPOS_PRIO_DELTA -1
-
-#define PPOS_QUANTA 10
-// EM micro segundos (1000 micro = 1 mili)
-#define PPOS_TICK_DELTA 1000
-
-#define MAX(a, b) ((a) < (b) ? (b) : (a))
-#define MIN(a, b) ((a) > (b) ? (b) : (a))
-#define CLAMP(v) (MAX(MIN((v), PPOS_MAX_PRIO), PPOS_MIN_PRIO))
+#include "ppos_data.h"
 
 // Alocação global das tarefas mais e dispatcher
-static task_t __TaskDispatcher ;
-static task_t __TaskMain ;
+task_t __TaskDispatcher ;
+task_t __TaskMain ;
 // Ponteiros para as alocações globais
-static task_t *TaskCurr = &__TaskMain ;
-static task_t *TaskDispatcher = &__TaskDispatcher ;
+task_t *TaskCurr = &__TaskMain ;
+task_t *TaskDispatcher = &__TaskDispatcher ;
 
 // Fila de tarefas prontas
-static task_t *ReadyQueue ;
+task_t *ReadyQueue ;
 // Fila de tarefas dormindo
 static task_t *SleepQueue ;
 // Tarefa com menor tempo para acordar
@@ -60,7 +38,15 @@ static void dispatcher(void * arg) ;
 // Definie funções wrappers e de kernel
 // Vem aqui para poder acessar TaskCurr, etc.
 #define PPOS_KERNEL_FUNCS_IMPL
+#define PPOS_KERNEL_BUSY_CS
+#ifdef DEBUG_LOCK
+    #undef PPOS_KERNEL_BUSY_CS
+    /* #warning Fazendo com Kernel Locks */
+#else
+    /* #warning Fazendo com Busy Cs */
+#endif
 #include "ppos_kernel_funcs.h"
+#undef PPOS_KERNEL_BUSY_CS
 #undef PPOS_KERNEL_FUNCS_IMPL
 
 #ifdef DEBUG
@@ -350,12 +336,12 @@ void kernel_task_sleep (int t) {
 // =============== Funções de escalonamento  ===============
 void kernel_task_setprio (task_t *task, int prio) {
     if (task == NULL){
-        TaskCurr->prio = CLAMP(prio) ;
+        TaskCurr->prio = CLAMP_PRIO(prio) ;
         TaskCurr->dprio = TaskCurr->prio;
         return ;
     }
 
-    task->prio = CLAMP(prio) ;
+    task->prio = CLAMP_PRIO(prio) ;
     task->dprio = task->prio;
 }
 
@@ -376,10 +362,10 @@ static task_t *scheduler(void) {
     it = it->next ;
     while (it != ReadyQueue){
         if (it->dprio < min_prio->dprio){
-            min_prio->dprio = CLAMP(min_prio->dprio + PPOS_PRIO_DELTA) ;
+            min_prio->dprio = CLAMP_PRIO(min_prio->dprio + PPOS_PRIO_DELTA) ;
             min_prio = it ;
         } else {
-            it->dprio = CLAMP(it->dprio + PPOS_PRIO_DELTA) ;
+            it->dprio = CLAMP_PRIO(it->dprio + PPOS_PRIO_DELTA) ;
         }
          it = it->next ;
     }
