@@ -1,8 +1,9 @@
 CFLAGS = -Wall -Wextra
 PROJETO = p9
-LIBS = obj/queue.o obj/ppos_ipc.o
+LIBS = obj/queue.o obj/ppos_ipc.o obj/ppos_mqueue.o
+LLIBS = -lm
 
-all: obj exe testes/ping-pong-filosofos
+all: obj exe testes/ping-pong-mqueue
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
@@ -36,7 +37,7 @@ obj/ping-pong-%.o: testes/ping-pong-%.c
 	gcc $(CFLAGS) -I $$PWD -c $^ -o $@
 
 testes/ping-pong-%: obj/ping-pong-%.o obj/ppos_core.o $(LIBS)
-	gcc $^ -o exe/"`basename $@`"
+	gcc $^ -o exe/"`basename $@`" $(LLIBS)
 # ============ testes ============
 
 # ============ objects ============
@@ -52,8 +53,11 @@ obj/queue.o: queue.c queue.h
 obj/ppos_core.o: ppos_core.c ppos.h ppos_data.h 
 	gcc $(CFLAGS) -c ppos_core.c -o $@
 
-obj/ppos_ipc.o: ppos_ipc.c
+obj/ppos_ipc.o: ppos_ipc.c ppos.h ppos_data.h
 	gcc $(CFLAGS) -c ppos_ipc.c -o $@
+
+obj/ppos_mqueue.o: ppos_mqueue.c ppos.h ppos_data.h
+	gcc $(CFLAGS) -c ppos_mqueue.c -o $@
 
 # ============ objects ============
 
