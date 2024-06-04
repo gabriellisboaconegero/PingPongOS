@@ -109,6 +109,7 @@ int main (int argc, char *argv[])
    // aguarda o somador encerrar
    task_wait (&somador) ;
 
+   printf("MQueue raizes tem %d itens\n", mqueue_msgs(&queueRaizes)) ;
    // destroi as filas de mensagens
    printf ("main: destroi queueValores\n") ;
    mqueue_destroy (&queueValores) ;

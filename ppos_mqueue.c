@@ -96,8 +96,11 @@ int mqueue_recv (mqueue_t *queue, void *msg) {
 int mqueue_destroy (mqueue_t *queue) {
     if (queue == NULL || queue->dead)
         return PPOS_QUEUE_ERROR ;
-    // Destroi semaforos
-    if (sem_destroy(&queue->s_buffer) < 0 || 
+    // Destroi semaforos. Mas antes pega o buffer, para evitar
+    // que o buffer seja acessado após ser destruido. Depois
+    // destroi os semaforos
+    if (sem_down(&queue->s_buffer) < 0 ||
+        sem_destroy(&queue->s_buffer) < 0 || 
         sem_destroy(&queue->s_vaga) < 0 ||
         sem_destroy(&queue->s_item) < 0 )
         return PPOS_QUEUE_ERROR ;
@@ -116,7 +119,13 @@ int mqueue_destroy (mqueue_t *queue) {
     return PPOS_QUEUE_OK ;
 }
 int mqueue_msgs (mqueue_t *queue) {
+    int ret ;
     if (queue == NULL || queue->dead)
         return PPOS_QUEUE_ERROR ;
-    return queue_size((queue_t *)queue->queue) ;
+    if (sem_down(&queue->s_buffer) < 0)
+        return PPOS_QUEUE_ERROR ;
+    ret = queue_size((queue_t *)queue->queue) ;
+    if (sem_up(&queue->s_buffer) < 0)
+        return PPOS_QUEUE_ERROR ;
+    return ret ;
 }
