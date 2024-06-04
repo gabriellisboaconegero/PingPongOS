@@ -1,5 +1,5 @@
 CFLAGS = -Wall -Wextra
-PROJETO = p9
+PROJETO = p12
 LIBS = obj/queue.o obj/ppos_ipc.o obj/ppos_mqueue.o
 LLIBS = -lm
 
