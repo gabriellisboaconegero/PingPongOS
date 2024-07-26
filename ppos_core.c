@@ -8,9 +8,11 @@
 // Alocação global das tarefas mais e dispatcher
 task_t __TaskDispatcher ;
 task_t __TaskMain ;
+task_t __TaskDiskMgr ;
 // Ponteiros para as alocações globais
 task_t *TaskCurr = &__TaskMain ;
 task_t *TaskDispatcher = &__TaskDispatcher ;
+task_t *TaskDiskMgr = &__TaskDiskMgr ;
 
 // Fila de tarefas prontas
 task_t *ReadyQueue ;

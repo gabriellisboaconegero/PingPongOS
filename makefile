@@ -1,10 +1,10 @@
 CFLAGS = -Wall -Wextra
 PROJETO = p12
-LIBS = obj/queue.o obj/ppos_ipc.o obj/ppos_mqueue.o
-LLIBS = -lm
+LIBS = obj/queue.o obj/ppos_ipc.o obj/ppos_mqueue.o obj/disk.o obj/ppos_disk.o
+LLIBS = -lm -lrt
 
 # all:   CFLAGS += -DDEBUG_LOCK
-all: obj exe testes/ping-pong-mqueue
+all: obj exe testes/ping-pong-disco1
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
@@ -59,6 +59,12 @@ obj/ppos_ipc.o: ppos_ipc.c ppos.h ppos_data.h
 
 obj/ppos_mqueue.o: ppos_mqueue.c ppos.h ppos_data.h
 	gcc $(CFLAGS) -c ppos_mqueue.c -o $@
+
+obj/disk.o: disk.c disk.h
+	gcc $(CFLAGS) -c disk.c -o $@
+
+obj/ppos_disk.o: ppos_disk.c ppos_disk.h
+	gcc $(CFLAGS) -c ppos_disk.c -o $@
 
 # ============ objects ============
 
