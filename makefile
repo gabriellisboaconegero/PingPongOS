@@ -4,7 +4,7 @@ LIBS = obj/queue.o obj/ppos_ipc.o obj/ppos_mqueue.o obj/disk.o obj/ppos_disk.o
 LLIBS = -lm -lrt
 
 # all:   CFLAGS += -DDEBUG_LOCK
-all: obj exe testes/ping-pong-disco1
+all: obj exe disk testes/ping-pong-disco2
 
 debug: CFLAGS+= -DDEBUG -g
 debug: all
@@ -47,6 +47,10 @@ obj:
 
 exe:
 	mkdir -p exe
+	ln -s disk.dat exe/disk.dat
+
+disk:
+	cp disk.dat.bkp disk.dat
 
 obj/queue.o: queue.c queue.h
 	gcc $(CFLAGS) -c queue.c -o $@

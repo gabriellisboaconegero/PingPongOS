@@ -8,11 +8,9 @@
 // Alocação global das tarefas mais e dispatcher
 task_t __TaskDispatcher ;
 task_t __TaskMain ;
-task_t __TaskDiskMgr ;
 // Ponteiros para as alocações globais
 task_t *TaskCurr = &__TaskMain ;
 task_t *TaskDispatcher = &__TaskDispatcher ;
-task_t *TaskDiskMgr = &__TaskDiskMgr ;
 
 // Fila de tarefas prontas
 task_t *ReadyQueue ;
@@ -20,6 +18,8 @@ task_t *ReadyQueue ;
 static task_t *SleepQueue ;
 // Tarefa com menor tempo para acordar
 static task_t *MinTaskAwake ;
+
+static int NumTasks ;
 
 // ============= Global vars =============
 // Contador de id's das tasks, diz qual o id da próxima task a ser criada
@@ -214,6 +214,8 @@ int kernel_task_init (task_t *task,			// descritor da nova tarefa
 
     task->status = PPOS_PRONTA ;
 
+    NumTasks++ ;
+
 #ifdef DEBUG
     PPOS_DEBUG("Inicializando task %d. (func = %p)", task->id, start_func) ;
 #endif
@@ -246,7 +248,7 @@ void kernel_task_exit(int exit_code) {
     TaskCurr->status = PPOS_TERMINADA ;
     TaskCurr->ret_cod = exit_code ;
     kernel_task_switch(TaskDispatcher) ;
-    fprintf(stderr, "[UNREACHABLE][%s]: Não deveria chegar aqui, função ja terminada\n", __func__) ;
+    fprintf(stderr, "[UNREACHABLE][%s]: Não deveria chegar aqui, função ja terminada %d\n", __func__, task_id()) ;
 }
 
 int kernel_task_switch (task_t *task) {
@@ -443,10 +445,12 @@ static void dispatcher(void * arg) {
     }
 
     // Enquanto tiver tasks para executar na fila de prontos
-    while (queue_size((queue_t *) ReadyQueue) || queue_size((queue_t *) SleepQueue)) {
+    while (NumTasks) {
         check_sleep_queue() ;
         proxima = scheduler() ;
         if (proxima != NULL) {
+            if (proxima->status == PPOS_TERMINADA)
+                continue ;
             proxima->status = PPOS_RODANDO ;
 #ifdef DEBUG
     PPOS_DEBUG("Proxima task %d", proxima->id) ;
@@ -462,6 +466,7 @@ static void dispatcher(void * arg) {
                     awake_task_queue(proxima) ;
                     if (proxima != &__TaskMain)
                         free(proxima->context.uc_stack.ss_sp) ;
+                    NumTasks-- ;
                     break ;
                 case PPOS_PRONTA:
                     // Coloca na fila de prontas de volta

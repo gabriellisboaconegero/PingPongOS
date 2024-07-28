@@ -8,6 +8,11 @@
 #define __DISK_MGR__
 #include "ppos.h"
 
+#define PPOS_DISK_READ_OP   0
+#define PPOS_DISK_WRITE_OP  1
+#define PPOS_DISK_READY     2
+#define PPOS_DISK_MGR_ERROR -1
+
 // estruturas de dados e rotinas de inicializacao e acesso
 // a um dispositivo de entrada/saida orientado a blocos,
 // tipicamente um disco rigido.
@@ -16,18 +21,11 @@
 typedef struct
 {
     // completar com os campos necessarios
-    short initialized ;     // Se gerente de disco foi inicializado
-    semaphore_t s_disk ;    // Semaforo de acesso ao disco
-    int blk_size ;          // Tamanho do bloco do disco
-    int num_blks ;          // Quantidade de blocos
-    struct pedido_t {
-        struct pedido_t *prev, *next ;
-        task_t *request_task ;  // Tarefa que fez pedido
-        void *buffer ;          // Buffer de dados que task passou
-        int block ;             // Bloco da operação
-        int type ;              // Tipo do pedido (0 - leitura, 1 - escrita)
-    } *fila_disco ;         // Fila de pedidos
-    task_t *waiting_queue ; // Fila de espera
+    short initialized ;             // Se gerente de disco foi inicializado
+    semaphore_t s_disk ;            // Semaforo de acesso ao disco
+    semaphore_t s_pronto ;          // Semaforo de pedidos requisitados ao disco
+    int blk_size ;                  // Tamanho do bloco do disco
+    int num_blks ;                  // Quantidade de blocos
 } disk_t ;
 
 // inicializacao do gerente de disco

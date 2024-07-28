@@ -27,7 +27,7 @@ int mqueue_init (mqueue_t *queue, int max, int size) {
 }
 
 static struct buffer_t *prod_msg(mqueue_t *q, void *msg){
-    struct buffer_t *b = calloc(1, sizeof(q->queue)) ;
+    struct buffer_t *b = calloc(1, sizeof(struct buffer_t)) ;
     if (b != NULL){
         b->msg = calloc(1, q->msg_size) ;
         if (b->msg == NULL){
